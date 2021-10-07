@@ -1,6 +1,6 @@
 import datetime
 
-from haversine import haversine
+from haversine import haversine, Unit
 from utils.DbConnector import DbConnector
 
 
@@ -79,8 +79,52 @@ class Task2:
             print("Duplicate rows:", Count)
 
     def six(self):
-        # Requires that data.zip is unzipped
-        pass
+        query = """
+            SELECT user_id, lat, lon, altitude, date_days FROM TrackPoint
+            INNER JOIN Activity A on TrackPoint.activity_id = A.id
+            INNER JOIN User U on A.user_id = U.id
+            """
+
+        self.cursor.execute(query)
+
+        # Constants
+        distanceInFeet = 328.08399
+        sixtySecondsInDays = 60 / 86.400
+
+        contacts = {}
+
+        for i in range(0, 182):
+            # Convert from 0 to 000
+            formattedUserId = str(i).zfill(3)
+            contacts[formattedUserId] = []
+
+        resultRow = self.cursor.fetchall()
+
+        for TrackpointA in resultRow:
+            for TrackpointB in resultRow:
+                # Skip comparing trackpoints from the same user
+                if TrackpointA['id'] != TrackpointB['id']:
+                    # Find the time delta between the two points
+                    differenceInDays = abs((TrackpointA['date_time'] - TrackpointB['date_time']).days)
+
+                    # Skip occurrences where time difference is larger than sixtySecondsInDays
+                    if differenceInDays <= sixtySecondsInDays:
+                        # Generate coordinate tuples for TrackpointA and TrackpointB
+                        coordinatesA = (TrackpointA['lat'], TrackpointA['lon'])
+                        coordinatesB = (TrackpointB['lat'], TrackpointB['lon'])
+
+                        # Find the difference in distance between coordinatesA and coordinatesB
+                        distanceDifferenceInMeters = haversine(coordinatesA, coordinatesB, unit=Unit.METERS)
+
+                        # Skip occurrences where the difference in distance is larger than 100 meters
+                        if distanceDifferenceInMeters < 100:
+                            # if TrackpointA['altitude'] == -777: TrackpointA['altitude'] = 6
+
+                            if abs(TrackpointA['altitude'] - TrackpointB['altitude']) < distanceInFeet:
+                                contacts[TrackpointA['id']].append(TrackpointB['id'])
+                                contacts[TrackpointB['id']].append(TrackpointA['id'])
+
+        return contacts
 
     # Complete
     def seven(self):
@@ -190,8 +234,8 @@ class Task2:
 
         for user in range(0, 183):
             query = "SELECT user_id as UserID, altitude from Activity " \
-                    "inner join TrackPoint TP on Activity.id = TP.activity_id " \
-                    "where user_id={user}".format(user=user)
+                    "INNER JOIN TrackPoint TP on Activity.id = TP.activity_id " \
+                    "WHERE user_id={user}".format(user=user)
 
             self.cursor.execute(query)
 
@@ -216,9 +260,33 @@ class Task2:
         for userWithAltitude in sortedResult:
             print("User:", userWithAltitude[0], " Altitude gained:", userWithAltitude[1])
 
-
+    # Complete
     def twelve(self):
-        pass
+        query = """
+                SELECT user, totalInvalid as 'Total invalid activities' FROM (
+                SELECT user_id AS user, COUNT(*) AS 'totalInvalid' FROM (
+                        SELECT activity_id, MAX(diff) AS 'maxdiff' FROM (
+                            SELECT activity_id, date_time, last_date_time, TIMESTAMPDIFF(MINUTE, last_date_time, date_time) AS 'diff' FROM (
+                                SELECT activity_id, date_time, LAG(date_time) OVER (PARTITION BY activity_id) AS last_date_time FROM Trackpoint
+                                ) AS times
+                            ) AS time_diff
+                        GROUP BY activity_id
+                        ) AS MaxDifference
+                    LEFT JOIN Activity on Activity.id = MaxDifference.activity_id
+                    WHERE maxdiff > 300
+                    GROUP BY user_id
+                ) AS invalids
+                ORDER BY totalInvalid DESC
+                """
+
+        result = {}
+
+        self.cursor.execute(query)
+
+        for (user_id, totalInvalid) in self.cursor:
+            result[user_id] = totalInvalid
+
+        print(result)
 
 
 def main():
@@ -235,6 +303,7 @@ def main():
     #question.nine()
     #question.ten()
     #question.eleven()
+    question.twelve()
 
 
 if __name__ == '__main__':
