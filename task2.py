@@ -124,7 +124,9 @@ class Task2:
                                 contacts[TrackpointA['id']].append(TrackpointB['id'])
                                 contacts[TrackpointB['id']].append(TrackpointA['id'])
 
-        return contacts
+        for userId, contacts in contacts.items():
+            print(f"User with id {userId} have been close to the following users: %s"
+                  .format(userId=userId, contacts=' '.join(contacts)))
 
     # Complete
     def seven(self):
